@@ -1,0 +1,77 @@
+#!/bin/bash
+
+RED='\033[91m'
+BLUE='\033[94m'
+GREEN='\033[92m'
+YELLOW='\033[93m'
+ENDC='\033[0m'
+
+BUILD_DIR="${HOME}/abs"
+VERBOSE="true"
+declare -A TO_COMPILE # a nice hash table, thnak you bash 4
+TO_RETRIEVE=()
+# don't care about pgp, clean the directory after build, don't wait user's confirmation in pacman
+MAKEPKG_FLAGS="--skippgpcheck -c --noconfirm "
+
+#for PKG in ${!TO_COMPILE[@]}; do
+function build_package() {
+    echo "Compiling $1 source files"
+    cd "${BUILD_DIR}/$1"
+    makepkg ${MAKEPKG_FLAGS}
+}
+#done
+
+if ! [[ -d ${BUILD_DIR} ]]; then
+    mkdir ${BUILD_DIR}
+    ${VERBOSE} && echo -e ${GREEN}"${BUILD_DIR} created"${END}
+fi
+${VERBOSE} && echo -e ${YELLOW}"${BUILD_DIR} set as build directory"${ENDC}
+
+FORCE_COPY=false
+OPTIONS="cdfirs"
+while getopts "${OPTIONS}" OPTION; do
+    case "${OPTION}" in
+	'c' ) MAKEPKG_FLAGS+="-c ";
+	      ;;
+	'd' ) MAKEPKG_FLAGS+="-d ";
+	      ;;
+    	'f' ) MAKEPKG_FLAGS+="-f "; FORCE_COPY=true;
+    	      ;;
+	'i' ) MAKEPKG_FLAGS+="-i ";
+	      ;;
+	'r' ) MAKEPKG_FLAGS+="-r ";
+	      ;;
+    	's' ) MAKEPKG_FLAGS+="-s ";
+    	      ;;
+    	* ) echo -e "Usage: $0 [-d] [-f] [-i] [-r] [-s]\nSee makepkg man page for description." 1>&2; exit 1
+    	    ;;
+    esac
+    
+done
+
+for PKG in "${@:${OPTIND}:${#@}}"; do
+    #echo ${PKG}
+    PKG_INFO=$(pacman -Si ${PKG})
+    #PKG_GRP=$(echo "${PKG_INFO}" | sed -n 's/^Groups\s*: \(.*\)$/\1/p')
+    PKG_REPO=$(echo "${PKG_INFO}" | sed -n 's/^Repository\s*: \(.*\)$/\1/p')
+    PKG_BASE=${PKG}
+    PKG_DIR="/var/abs/${PKG_REPO}/${PKG_BASE}"
+    if ! [[ -d ${PKG_DIR} ]]; then
+	${VERBOSE} && echo -n "Getting base package..."
+	PKG_BASE="$(curl -s  https://www.archlinux.org/packages/${PKG_REPO}/x86_64/bind-tools/json/ | sed 's/.*"pkgbase": "\([^"]*\).*/\1/')"
+	${VERBOSE} && echo " ${PKG_BASE}"
+	PKG_DIR="/var/abs/${PKG_REPO}/${PKG_BASE}"
+    fi
+    echo ${PKG_DIR}
+    if [[ -z "${PKG_DIR}" ]]; then
+	echo -e ${RED}"ERROR : ${PKG} cannot be found !"${ENDC}
+	${VERBOSE} && echo -e ${RED}"Package ${PKG} does not belong to ${BUILD_DIR}"${ENDC}
+    else
+	if [[ ! -d "${BUILD_DIR}/${PKG_BASE}" ]] || [[ "${FORCE_COPY}" == true ]]; then
+	    [[ -d "${BUILD_DIR}/${PKG_BASE}" ]] && echo "Directory exists, but copy is forced (option -f passed as argument)"
+	    cp -r "${PKG_DIR}" "${BUILD_DIR}"
+	    echo -e ${GREEN}"Copying ${PKG} files to ${BUILD_DIR}/${PKG_BASE}"${ENDC}
+	    build_package ${PKG_BASE}
+	fi
+    fi
+done

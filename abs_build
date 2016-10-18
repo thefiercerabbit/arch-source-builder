@@ -54,11 +54,12 @@ for PKG in "${@:${OPTIND}:${#@}}"; do
     PKG_INFO=$(pacman -Si ${PKG})
     #PKG_GRP=$(echo "${PKG_INFO}" | sed -n 's/^Groups\s*: \(.*\)$/\1/p')
     PKG_REPO=$(echo "${PKG_INFO}" | sed -n 's/^Repository\s*: \(.*\)$/\1/p')
+    PKG_ARCH=$(echo "${PKG_INFO}" | sed -n 's/^Architecture\s*: \(.*\)$/\1/p')
     PKG_BASE=${PKG}
     PKG_DIR="/var/abs/${PKG_REPO}/${PKG_BASE}"
     if ! [[ -d ${PKG_DIR} ]]; then
 	${VERBOSE} && echo -n "Getting base package..."
-	PKG_BASE="$(curl -s  https://www.archlinux.org/packages/${PKG_REPO}/x86_64/bind-tools/json/ | sed 's/.*"pkgbase": "\([^"]*\).*/\1/')"
+	PKG_BASE="$(curl -s  https://www.archlinux.org/packages/${PKG_REPO}/${PKG_ARCH}/${PKG}/json/ | sed 's/.*"pkgbase": "\([^"]*\).*/\1/')"
 	${VERBOSE} && echo " ${PKG_BASE}"
 	PKG_DIR="/var/abs/${PKG_REPO}/${PKG_BASE}"
     fi

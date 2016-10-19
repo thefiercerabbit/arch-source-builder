@@ -1,25 +1,46 @@
 #!/bin/bash
+declare -A TO_COMPILE # a nice hash table, thank you bash 4
+
+#### Global variables #####
+BUILD_DIR="${HOME}/abs"
+PKG=""
+PKG_ARCH=""
+PKG_BASE=""
+#PKG_FILE=""
+#PKG_INFO=""
+PKG_VERSION=""
+#PKG_REPO=""
+# don't care about pgp, clean the directory after build, don't wait user's confirmation in pacman
+MAKEPKG_FLAGS="--skippgpcheck -C --noconfirm "
+FORCE_COPY=false
+OUTPUT_DIR="${HOME}/abs/AAA-packages"
+#TO_RETRIEVE=()
 
 RED='\033[91m'
 BLUE='\033[94m'
 GREEN='\033[92m'
 YELLOW='\033[93m'
 ENDC='\033[0m'
-
-BUILD_DIR="${HOME}/abs"
-VERBOSE="true"
-declare -A TO_COMPILE # a nice hash table, thnak you bash 4
-TO_RETRIEVE=()
-# don't care about pgp, clean the directory after build, don't wait user's confirmation in pacman
-MAKEPKG_FLAGS="--skippgpcheck -c --noconfirm "
-
-#for PKG in ${!TO_COMPILE[@]}; do
+###########################
 function build_package() {
-    echo "Compiling $1 source files"
-    cd "${BUILD_DIR}/$1"
-    makepkg ${MAKEPKG_FLAGS}
+    if ! [ -d "${OUTPUT_DIR}" ]; then
+	echo "Creating output directory for built packages : ${OUTPUT_DIR}"
+	mkdir -p "${OUTPUT_DIR}"
+    fi
+    PKG_FILE="${OUTPUT_DIR}/${PKG}-${PKG_VERSION}-${PKG_ARCH}.pkg.tar.xz"
+    echo -n "Looking for ${PKG_FILE}..."
+    if [[ -f "${PKG_FILE}" ]] && [[ "${FORCE_COPY}" == false ]]; then
+	echo " found ! No need to rebuild, passing"
+    else
+	echo " not found !"
+	echo "Compiling ${PKG} source files"
+	cd "${BUILD_DIR}/$1"
+	makepkg ${MAKEPKG_FLAGS}
+	for f in ./*.pkg.tar.xz; do
+	    mv -v $f "${OUTPUT_DIR}/$f"
+	done
+    fi
 }
-#done
 
 if ! [[ -d ${BUILD_DIR} ]]; then
     mkdir ${BUILD_DIR}
@@ -27,8 +48,7 @@ if ! [[ -d ${BUILD_DIR} ]]; then
 fi
 ${VERBOSE} && echo -e ${YELLOW}"${BUILD_DIR} set as build directory"${ENDC}
 
-FORCE_COPY=false
-OPTIONS="cdfirs"
+OPTIONS="cdfirso:"
 while getopts "${OPTIONS}" OPTION; do
     case "${OPTION}" in
 	'c' ) MAKEPKG_FLAGS+="-c ";
@@ -38,6 +58,8 @@ while getopts "${OPTIONS}" OPTION; do
     	'f' ) MAKEPKG_FLAGS+="-f "; FORCE_COPY=true;
     	      ;;
 	'i' ) MAKEPKG_FLAGS+="-i ";
+	      ;;
+	'o' ) OUTPUT_DIR="$(realpath ${OPTARG})";
 	      ;;
 	'r' ) MAKEPKG_FLAGS+="-r ";
 	      ;;
@@ -52,9 +74,9 @@ done
 for PKG in "${@:${OPTIND}:${#@}}"; do
     #echo ${PKG}
     PKG_INFO=$(pacman -Si ${PKG})
-    #PKG_GRP=$(echo "${PKG_INFO}" | sed -n 's/^Groups\s*: \(.*\)$/\1/p')
     PKG_REPO=$(echo "${PKG_INFO}" | sed -n 's/^Repository\s*: \(.*\)$/\1/p')
     PKG_ARCH=$(echo "${PKG_INFO}" | sed -n 's/^Architecture\s*: \(.*\)$/\1/p')
+    PKG_VERSION=$(echo "${PKG_INFO}" | sed -n 's/^Version\s*: \(.*\)$/\1/p')
     PKG_BASE=${PKG}
     PKG_DIR="/var/abs/${PKG_REPO}/${PKG_BASE}"
     if ! [[ -d ${PKG_DIR} ]]; then
